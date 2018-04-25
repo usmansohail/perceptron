@@ -1,3 +1,4 @@
+import numpy as np
 import json
 import math
 import pickle
@@ -9,12 +10,12 @@ import sys
 
 class Valence(Enum):
     pos = 1
-    neg = 0
+    neg = -1
 
 
 class Fake(Enum):
     real = 1
-    fake = 0
+    fake = -1
 
 class input_line():
     valence_assigned = None
@@ -60,6 +61,17 @@ class input_line():
     def correct_fake(self):
         return self.fake_assigned == self.fake_true
 
+    def get_vector(self, size, words_dict):
+        vector = [0] * size;
+
+        for word in self.words:
+            vector[words_dict[word]] += 1
+
+        vector = np.array([vector])
+
+        return vector
+
+
 
 class Perceptron():
     weights_valence = None
@@ -67,7 +79,8 @@ class Perceptron():
     bias_valence = None
     bias_fake = None
     lines = []
-    words = {}
+    words_dict = {}
+    words = []
     dimension = None
 
     def __init__(self, input):
@@ -79,28 +92,40 @@ class Perceptron():
             self.lines.append(temp_input_line)
 
             for word in temp_input_line.words:
-                self.words[word] = 1
+                self.words_dict[word] = 1
 
-            # initialize an array to 0 of size dimensions
-            self.dimension = len(dict(self.words).keys())
-            self.weights_fake = [0] * self.dimension
-            self.weights_valence = [0] * self.dimension
+        # get the list of words
+        self.words = dict(self.words_dict).keys()
 
-            # initialize bias
-            self.bias_fake = 0
-            self.bias_valence = 0
+        # store the index of the word in the dictionary
+        for i, word in enumerate(self.words):
+            self.words_dict[word] = i
+
+
+        # initialize an array to 0 of size dimensions
+        self.dimension = len(dict(self.words_dict).keys())
+        self.weights_fake = [0] * self.dimension
+        self.weights_valence = [0] * self.dimension
+
+        # initialize bias
+        self.bias_fake = 0
+        self.bias_valence = 0
 
 
 
     def train(self, input):
-        file = codecs.open(input, 'rb', 'utf-8')
-        for line in file.readlines():
-            self.extract_line(line)
-        self.smooth()
+        for line in self.lines:
+
+
+
         with open('nbmodel.txt', 'w') as fp:
             json.dump((self.P_fake_fake, self.P_fake_real, self.P_val_neg, self.P_val_pos,
             self.prior_real, self.prior_fake, self.prior_pos, self.prior_neg), fp)
 
+    def classify_valence(self, ):
+
+
+    def classify_fake(self, ):
 
     def extract_line(self, line):
         temp_line = line.split(' ')
@@ -114,9 +139,9 @@ class Perceptron():
             except KeyError:
                 # this means the word was not a stop word, try and put it
                 try:
-                    self.words[word] += 1
+                    self.words_dict[word] += 1
                 except KeyError:
-                    self.words[word] = 1
+                    self.words_dict[word] = 1
                 if temp_input_line.valence_true is Valence.neg:
                     self.num_val_neg += 1
                     try:
