@@ -5,3 +5,6 @@ from classes import Fake
 
 
 m = Perceptron('train-labeled.txt')
+
+for i in range(10):
+    m.train()

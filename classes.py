@@ -56,10 +56,10 @@ class input_line():
         self.fake_assigned = fake
 
     def correct_valence(self):
-        return self.valence_assigned == self.valence_true
+        return self.valence_true.value
 
     def correct_fake(self):
-        return self.fake_assigned == self.fake_true
+        return self.fake_true.value
 
     def get_vector(self, size, words_dict):
         vector = [0] * size;
@@ -107,25 +107,45 @@ class Perceptron():
         self.weights_fake = [0] * self.dimension
         self.weights_valence = [0] * self.dimension
 
+        self.weights_fake = np.array([self.weights_fake])
+        self.weights_valence = np.array([self.weights_valence])
+
         # initialize bias
         self.bias_fake = 0
         self.bias_valence = 0
 
 
 
-    def train(self, input):
+    def train(self):
+        incorrect_valence =  0
+        incorrect_fake =  0
+
         for line in self.lines:
+            valence_result = self.classify_valence(line.get_vector(self.dimension, self.words_dict))
+            fake_result = self.classify_fake(line.get_vector(self.dimension, self.words_dict))
+
+            if line.correct_valence() * valence_result <= 0:
+                corr_val = int(line.correct_valence())
+                add_val = line.correct_valence() * line.get_vector(self.dimension, self.words_dict)
+                self.weights_valence += add_val
+                self.bias_valence += line.correct_valence()
+                incorrect_valence += 1
+
+            if line.correct_fake() * fake_result <= 0:
+                self.weights_fake += line.correct_fake() * line.get_vector(self.dimension, self.words_dict)
+                self.bias_fake += line.correct_fake()
+                incorrect_fake += 1
+
+        print("Incorrect fake: ", incorrect_fake, "INcorrect valence: ", incorrect_valence)
+        return (incorrect_fake, incorrect_valence)
 
 
-
-        with open('nbmodel.txt', 'w') as fp:
-            json.dump((self.P_fake_fake, self.P_fake_real, self.P_val_neg, self.P_val_pos,
-            self.prior_real, self.prior_fake, self.prior_pos, self.prior_neg), fp)
-
-    def classify_valence(self, ):
+    def classify_valence(self, x):
+        return np.dot(x, np.transpose(self.weights_valence)) + self.bias_valence
 
 
-    def classify_fake(self, ):
+    def classify_fake(self, x):
+        return np.dot(x, np.transpose(self.weights_fake)) + self.bias_fake
 
     def extract_line(self, line):
         temp_line = line.split(' ')
