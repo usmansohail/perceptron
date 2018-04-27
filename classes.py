@@ -82,8 +82,20 @@ class Perceptron():
     words_dict = {}
     words = []
     dimension = None
+    count = None
+    cache_valence = None
+    cache_fake = None
+    cache_bias_valence = None
+    cache_bias_fake = None
+    averaged_valence_weights = None
+    averaged_fake_weights = None
+    averaged_valence_bias = None
+    averaged_fake_bias = None
 
-    def __init__(self, input):
+    def __init__(self):
+        pass
+
+    def initialize(self, input):
         # read all words in the training file, store the lines
         file = codecs.open(input, 'rb', 'utf-8')
         for line in file.readlines():
@@ -114,6 +126,12 @@ class Perceptron():
         self.bias_fake = 0
         self.bias_valence = 0
 
+        # variables for averaged perceptron
+        self.averaged_valence_weights = np.array([[0] * self.dimension])
+        self.averaged_fake_weights = np.array([[0] * self.dimension])
+        self.averaged_valence_bias = 0
+        self.averaged_fake_bias = 0
+
 
 
     def train(self):
@@ -125,19 +143,69 @@ class Perceptron():
             fake_result = self.classify_fake(line.get_vector(self.dimension, self.words_dict))
 
             if line.correct_valence() * valence_result <= 0:
-                corr_val = int(line.correct_valence())
                 add_val = line.correct_valence() * line.get_vector(self.dimension, self.words_dict)
                 self.weights_valence += add_val
                 self.bias_valence += line.correct_valence()
                 incorrect_valence += 1
+
 
             if line.correct_fake() * fake_result <= 0:
                 self.weights_fake += line.correct_fake() * line.get_vector(self.dimension, self.words_dict)
                 self.bias_fake += line.correct_fake()
                 incorrect_fake += 1
 
-        print("Incorrect fake: ", incorrect_fake, "INcorrect valence: ", incorrect_valence)
+        # display results
+        print("Incorrect fake: ", incorrect_fake, "Incorrect valence: ", incorrect_valence)
         return (incorrect_fake, incorrect_valence)
+
+
+    def train_averaged(self):
+        incorrect_valence = 0
+        incorrect_fake = 0
+
+        # reset values every training session
+        self.count = 0
+        self.cache_valence = np.array([[0] * self.dimension])
+        self.cache_fake = np.array([[0] * self.dimension])
+        self.cache_bias_valence = 0
+        self.cache_bias_fake = 0
+
+        for line in self.lines:
+            valence_result = self.classify_averaged_valence(line.get_vector(self.dimension, self.words_dict))
+            fake_result = self.classify_averaged_fake(line.get_vector(self.dimension, self.words_dict))
+            self.count += 1
+
+            if line.correct_valence() * valence_result <= 0:
+                add_val = line.correct_valence() * line.get_vector(self.dimension, self.words_dict)
+                self.averaged_valence_weights += add_val
+                self.averaged_valence_bias += line.correct_valence()
+                incorrect_valence += 1
+
+                self.cache_valence += (line.correct_valence() * self.count) * \
+                    line.get_vector(self.dimension, self.words_dict)
+                self.cache_bias_valence += line.correct_valence() * self.count
+
+            if line.correct_fake() * fake_result <= 0:
+                self.averaged_fake_weights += line.correct_fake() * line.get_vector(self.dimension, self.words_dict)
+                self.averaged_fake_bias += line.correct_fake()
+                incorrect_fake += 1
+
+                self.cache_fake += line.correct_fake() * \
+                    line.get_vector(self.dimension, self.words_dict) * self.count
+                self.cache_bias_fake += line.correct_fake() * self.count
+
+        # display results
+        print("Incorrect fake: ", incorrect_fake, "Incorrect valence: ", incorrect_valence)
+        return (incorrect_fake, incorrect_valence)
+
+    def average_training_data(self):
+        # average the weights
+        self.averaged_valence_weights = self.averaged_valence_weights - (float(1 / self.count) * self.cache_valence)
+        self.averaged_fake_weights = self.averaged_fake_weights - (float(1 / self.count) * self.cache_fake)
+
+        self.averaged_valence_bias = self.bias_valence - (float(1 / self.count) * self.cache_bias_valence)
+        self.averaged_fake_bias = self.bias_fake - (float(1 / self.count) * self.cache_bias_fake)
+
 
 
     def classify_valence(self, x):
@@ -147,42 +215,38 @@ class Perceptron():
     def classify_fake(self, x):
         return np.dot(x, np.transpose(self.weights_fake)) + self.bias_fake
 
-    def extract_line(self, line):
-        temp_line = line.split(' ')
-        temp_input_line = input_line(temp_line[0], temp_line[3:], temp_line[2], temp_line[1])
-        self.lines_saved.append(temp_input_line)
-        for w in temp_input_line.words:
-            regex = re.compile(r"[^a-zA-Z]")
-            word = re.sub(regex, '', w).lower()
-            try:
-                self.stops[word] += 1
-            except KeyError:
-                # this means the word was not a stop word, try and put it
-                try:
-                    self.words_dict[word] += 1
-                except KeyError:
-                    self.words_dict[word] = 1
-                if temp_input_line.valence_true is Valence.neg:
-                    self.num_val_neg += 1
-                    try:
-                        self.count_val_neg[word] += 1
-                    except KeyError:
-                        self.count_val_neg[word] = 1
-                if temp_input_line.valence_true is Valence.pos:
-                    self.num_val_pos += 1
-                    try:
-                        self.count_val_pos[word] += 1
-                    except KeyError:
-                        self.count_val_pos[word] = 1
-                if temp_input_line.fake_true is Fake.fake:
-                    self.num_fake_fake += 1
-                    try:
-                        self.count_fake_fake[word] += 1
-                    except KeyError:
-                        self.count_fake_fake[word] = 1
-                if temp_input_line.fake_true is Fake.real:
-                    self.num_fake_real += 1
-                    try:
-                        self.count_fake_real[word] += 1
-                    except KeyError:
-                        self.count_fake_real[word] = 1
+
+    def classify_averaged_valence(self, x):
+        return np.dot(x, np.transpose(self.averaged_valence_weights)) + self.averaged_valence_bias
+
+    def classify_averaged_fake(self, x):
+        return np.dot(x, np.transpose(self.averaged_fake_weights)) + self.averaged_fake_bias
+
+    def dump_data(self):
+        with open('vanillamodel.txt', 'w') as fp:
+            json.dump(("vanilla", self.weights_fake.tolist(), self.weights_valence.tolist(), self.bias_fake,
+                       self.bias_valence, list(self.words), self.words_dict), fp)
+        with open('averagedmodel.txt', 'w') as fp:
+            json.dump(("averaged", self.averaged_fake_weights.tolist(), self.averaged_valence_weights.tolist(),
+                       self.averaged_fake_bias, self.averaged_valence_bias, list(self.words), self.words_dict), fp)
+
+
+    def load_vanilla(self, weights_fake, weights_valence, bias_fake, bias_valence, words, words_dict):
+        self.weights_fake = weights_fake
+        self.weights_valence = weights_valence
+        self.bias_fake = bias_fake
+        self.bias_valence = bias_valence
+        self.words = words
+        self.words_dict = words_dict
+
+
+    def load_averaged(self, averaged_fake_weights, averaged_valence_weights, averaged_fake_bias,
+                      averaged_valence_bias, words, words_dict):
+        self.averaged_fake_weights = averaged_fake_weights
+        self.averaged_valence_weights = averaged_valence_weights
+        self.averaged_fake_bias = averaged_fake_bias
+        self.averaged_valence_bias = averaged_valence_bias
+        self.words = words
+        self.words_dict = words_dict
+
+

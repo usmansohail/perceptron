@@ -4,7 +4,17 @@ from classes import Valence
 from classes import Fake
 
 
-m = Perceptron('train-labeled.txt')
+m = Perceptron()
+m.initialize('train-labeled.txt')
 
-for i in range(10):
-    m.train()
+# print("Vanilla: ")
+# for i in range(10):
+#     m.train()
+
+
+print("Averaged: ")
+for i in range(1):
+    m.train_averaged()
+
+m.average_training_data()
+m.dump_data()
